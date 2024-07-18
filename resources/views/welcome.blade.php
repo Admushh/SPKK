@@ -62,30 +62,31 @@
                         </button>
                     </div>
                     <div class="modal-body">
-                        <form id="criteriaForm" action="/criteria" method="POST">
-                            @csrf
-                            <div id="criteria-container">
-                                <div class="form-section">
-                                    <div class="form-group">
-                                        <label for="criteria[0][name]">Criteria Name:</label>
-                                        <input type="text" class="form-control" id="criteria[0][name]" name="criteria[0][name]" required>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="criteria[0][weight]">Weight:</label>
-                                        <input type="number" step="0.01" class="form-control" id="criteria[0][weight]" name="criteria[0][weight]" required>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="criteria[0][utility]">Utility:</label>
-                                        <select class="form-control" id="criteria[0][utility]" name="criteria[0][utility]" required>
-                                            <option value="benefit">Benefit</option>
-                                            <option value="cost">Cost</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-                            <button type="button" class="btn btn-secondary" onclick="addCriteria()">Add Another Criteria</button>
-                            <button type="submit" class="btn btn-primary">Save Criteria</button>
-                        </form>
+                    <form id="criteriaForm" action="/criteria" method="POST">
+    @csrf
+    <div id="criteria-container">
+        <div class="form-section">
+            <div class="form-group">
+                <label for="criteria[0][name]">Criteria Name:</label>
+                <input type="text" class="form-control" id="criteria[0][name]" name="criteria[0][name]" required>
+            </div>
+            <div class="form-group">
+                <label for="criteria[0][weight]">Weight:</label>
+                <input type="number" step="0.01" class="form-control" id="criteria[0][weight]" name="criteria[0][weight]" required>
+            </div>
+            <div class="form-group">
+                <label for="criteria[0][utility]">Utility:</label>
+                <select class="form-control" id="criteria[0][utility]" name="criteria[0][utility]" required>
+                    <option value="benefit">Benefit</option>
+                    <option value="cost">Cost</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    <button type="button" class="btn btn-secondary" onclick="addCriteria()">Add Another Criteria</button>
+    <button type="submit" class="btn btn-primary">Save Criteria</button>
+</form>
+
                     </div>
                 </div>
             </div>

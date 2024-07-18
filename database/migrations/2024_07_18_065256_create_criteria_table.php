@@ -14,10 +14,11 @@ return new class extends Migration
         Schema::create('criterias', function (Blueprint $table) {
             $table->id();
             $table->string('name');
-            $table->decimal('weight', 5, 2);
+            $table->float('weight');
             $table->enum('utility', ['benefit', 'cost']);
             $table->timestamps();
         });
+        
         
     }
 

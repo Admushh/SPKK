@@ -1,6 +1,5 @@
 <?php
 
-
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
@@ -20,14 +19,12 @@ class SmartController extends Controller
 
     public function storeCriteria(Request $request)
     {
-        $validated = $request->validate([
-            'criteria' => 'required|array',
-            'criteria.*.name' => 'required|string|max:255',
-            'criteria.*.weight' => 'required|numeric|min:0|max:1'
-        ]);
-
-        foreach ($validated['criteria'] as $criterion) {
-            Criteria::create($criterion);
+        foreach ($request->criteria as $criterion) {
+            Criteria::create([
+                'name' => $criterion['name'],
+                'weight' => $criterion['weight'],
+                'utility' => $criterion['utility'], // Pastikan ada nilai untuk kolom utility
+            ]);
         }
         return redirect('/');
     }
@@ -52,16 +49,14 @@ class SmartController extends Controller
             'values.*.*.value' => 'required|numeric',
         ]);
 
-        $normalizedValues = $this->normalizeValues($validated['values']);
-
-        DB::transaction(function() use ($normalizedValues) {
-            foreach ($normalizedValues as $alternativeId => $criteriaValues) {
-                foreach ($criteriaValues as $criteriaId => $normalizedValue) {
+        DB::transaction(function() use ($validated) {
+            foreach ($validated['values'] as $alternativeId => $criteriaValues) {
+                foreach ($criteriaValues as $criteriaId => $value) {
                     AlternativeValue::updateOrCreate([
                         'alternative_id' => $alternativeId,
                         'criteria_id' => $criteriaId,
                     ], [
-                        'value' => $normalizedValue
+                        'value' => $value['value']
                     ]);
                 }
             }
@@ -70,48 +65,28 @@ class SmartController extends Controller
         return redirect()->route('results');
     }
 
-    private function normalizeValues($values)
-    {
-        $minMaxValues = [];
-        foreach ($values as $alternativeId => $criteriaValues) {
-            foreach ($criteriaValues as $criteriaId => $value) {
-                if (!isset($minMaxValues[$criteriaId])) {
-                    $minMaxValues[$criteriaId] = [
-                        'min' => $value['value'],
-                        'max' => $value['value']
-                    ];
-                } else {
-                    $minMaxValues[$criteriaId]['min'] = min($minMaxValues[$criteriaId]['min'], $value['value']);
-                    $minMaxValues[$criteriaId]['max'] = max($minMaxValues[$criteriaId]['max'], $value['value']);
-                }
-            }
-        }
-
-        $normalizedValues = [];
-        foreach ($values as $alternativeId => $criteriaValues) {
-            foreach ($criteriaValues as $criteriaId => $value) {
-                $min = $minMaxValues[$criteriaId]['min'];
-                $max = $minMaxValues[$criteriaId]['max'];
-                $normalizedValue = ($value['value'] - $min) / ($max - $min);
-                $normalizedValues[$alternativeId][$criteriaId] = $normalizedValue;
-            }
-        }
-
-        return $normalizedValues;
-    }
-
     public function results()
     {
         $criteria = Criteria::all();
         $alternatives = Alternative::all();
         $values = AlternativeValue::all();
-    
+
+        // Normalisasi bobot kriteria
+        $totalWeight = $criteria->sum('weight');
+        $criteria->each(function ($criterion) use ($totalWeight) {
+            $criterion->normalized_weight = $criterion->weight / $totalWeight;
+        });
+
+        // Hitung skor untuk setiap alternatif
         $rankings = $alternatives->map(function($alternative) use ($criteria, $values) {
             $score = 0;
             foreach ($criteria as $criterion) {
-                $value = $values->where('alternative_id', $alternative->id)->where('criteria_id', $criterion->id)->first();
+                $value = $values->where('alternative_id', $alternative->id)
+                                ->where('criteria_id', $criterion->id)
+                                ->first();
                 if ($value) {
-                    $score += $value->value * $criterion->weight;
+                    $normalizedValue = $this->calculateUtility($value->value, $criterion);
+                    $score += $normalizedValue * $criterion->normalized_weight;
                 }
             }
             return (object) [
@@ -119,12 +94,26 @@ class SmartController extends Controller
                 'score' => $score
             ];
         });
-    
-        $rankings = $rankings->sortByDesc('score');
-    
-        return view('results', compact('rankings'));
+
+        // Sort rankings by score in descending order
+        $rankings = $rankings->sortByDesc('score')->values();
+
+        return view('results', ['rankings' => $rankings]);
     }
-    
+
+    private function calculateUtility($value, $criterion)
+    {
+        $criteriaValues = AlternativeValue::where('criteria_id', $criterion->id)->get();
+        $minValue = $criteriaValues->min('value');
+        $maxValue = $criteriaValues->max('value');
+
+        if ($criterion->utility == 'cost') {
+            return ($maxValue - $value) / ($maxValue - $minValue);
+        } else { // benefit
+            return ($value - $minValue) / ($maxValue - $minValue);
+        }
+    }
+
     public function deleteCriteria($id)
     {
         Criteria::destroy($id);
