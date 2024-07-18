@@ -1,5 +1,6 @@
 <?php
 
+
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
@@ -22,8 +23,7 @@ class SmartController extends Controller
         $validated = $request->validate([
             'criteria' => 'required|array',
             'criteria.*.name' => 'required|string|max:255',
-            'criteria.*.weight' => 'required|numeric|min:0|max:1',
-            'criteria.*.type' => 'required|string|in:benefit,cost' // Added type (benefit or cost)
+            'criteria.*.weight' => 'required|numeric|min:0|max:1'
         ]);
 
         foreach ($validated['criteria'] as $criterion) {
@@ -72,9 +72,7 @@ class SmartController extends Controller
 
     private function normalizeValues($values)
     {
-        $criteria = Criteria::all();
         $minMaxValues = [];
-
         foreach ($values as $alternativeId => $criteriaValues) {
             foreach ($criteriaValues as $criteriaId => $value) {
                 if (!isset($minMaxValues[$criteriaId])) {
@@ -94,16 +92,7 @@ class SmartController extends Controller
             foreach ($criteriaValues as $criteriaId => $value) {
                 $min = $minMaxValues[$criteriaId]['min'];
                 $max = $minMaxValues[$criteriaId]['max'];
-                $criterion = $criteria->where('id', $criteriaId)->first();
-
-                if ($criterion->type == 'benefit') {
-                    // Normalization formula for benefit criteria
-                    $normalizedValue = ($value['value'] - $min) / ($max - $min);
-                } else {
-                    // Normalization formula for cost criteria
-                    $normalizedValue = ($max - $value['value']) / ($max - $min);
-                }
-
+                $normalizedValue = ($value['value'] - $min) / ($max - $min);
                 $normalizedValues[$alternativeId][$criteriaId] = $normalizedValue;
             }
         }
