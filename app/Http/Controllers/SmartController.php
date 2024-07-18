@@ -1,13 +1,12 @@
 <?php
 
-
-
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Criteria;
 use App\Models\Alternative;
 use App\Models\AlternativeValue;
+use Illuminate\Support\Facades\DB;
 
 class SmartController extends Controller
 {
@@ -20,7 +19,14 @@ class SmartController extends Controller
 
     public function storeCriteria(Request $request)
     {
-        foreach ($request->criteria as $criterion) {
+        $validated = $request->validate([
+            'criteria' => 'required|array',
+            'criteria.*.name' => 'required|string|max:255',
+            'criteria.*.weight' => 'required|numeric|min:0|max:1',
+            'criteria.*.type' => 'required|string|in:benefit,cost' // Added type (benefit or cost)
+        ]);
+
+        foreach ($validated['criteria'] as $criterion) {
             Criteria::create($criterion);
         }
         return redirect('/');
@@ -28,7 +34,12 @@ class SmartController extends Controller
 
     public function storeAlternative(Request $request)
     {
-        foreach ($request->alternatives as $alternative) {
+        $validated = $request->validate([
+            'alternatives' => 'required|array',
+            'alternatives.*.name' => 'required|string|max:255',
+        ]);
+
+        foreach ($validated['alternatives'] as $alternative) {
             Alternative::create($alternative);
         }
         return redirect('/');
@@ -36,28 +47,34 @@ class SmartController extends Controller
 
     public function calculate(Request $request)
     {
-        // Normalisasi data jika diperlukan
-        $normalizedValues = $this->normalizeValues($request->values);
+        $validated = $request->validate([
+            'values' => 'required|array',
+            'values.*.*.value' => 'required|numeric',
+        ]);
 
-        // Simpan nilai yang sudah dinormalisasi ke dalam database
-        foreach ($normalizedValues as $alternativeId => $criteriaValues) {
-            foreach ($criteriaValues as $criteriaId => $normalizedValue) {
-                AlternativeValue::create([
-                    'alternative_id' => $alternativeId,
-                    'criteria_id' => $criteriaId,
-                    'value' => $normalizedValue
-                ]);
+        $normalizedValues = $this->normalizeValues($validated['values']);
+
+        DB::transaction(function() use ($normalizedValues) {
+            foreach ($normalizedValues as $alternativeId => $criteriaValues) {
+                foreach ($criteriaValues as $criteriaId => $normalizedValue) {
+                    AlternativeValue::updateOrCreate([
+                        'alternative_id' => $alternativeId,
+                        'criteria_id' => $criteriaId,
+                    ], [
+                        'value' => $normalizedValue
+                    ]);
+                }
             }
-        }
+        });
 
-        // Redirect to results page
         return redirect()->route('results');
     }
 
     private function normalizeValues($values)
     {
-        // Ambil nilai maksimum dan minimum untuk setiap kriteria
+        $criteria = Criteria::all();
         $minMaxValues = [];
+
         foreach ($values as $alternativeId => $criteriaValues) {
             foreach ($criteriaValues as $criteriaId => $value) {
                 if (!isset($minMaxValues[$criteriaId])) {
@@ -72,13 +89,21 @@ class SmartController extends Controller
             }
         }
 
-        // Lakukan normalisasi min-max untuk setiap nilai kriteria
         $normalizedValues = [];
         foreach ($values as $alternativeId => $criteriaValues) {
             foreach ($criteriaValues as $criteriaId => $value) {
                 $min = $minMaxValues[$criteriaId]['min'];
                 $max = $minMaxValues[$criteriaId]['max'];
-                $normalizedValue = ($value['value'] - $min) / ($max - $min);
+                $criterion = $criteria->where('id', $criteriaId)->first();
+
+                if ($criterion->type == 'benefit') {
+                    // Normalization formula for benefit criteria
+                    $normalizedValue = ($value['value'] - $min) / ($max - $min);
+                } else {
+                    // Normalization formula for cost criteria
+                    $normalizedValue = ($max - $value['value']) / ($max - $min);
+                }
+
                 $normalizedValues[$alternativeId][$criteriaId] = $normalizedValue;
             }
         }
@@ -106,7 +131,6 @@ class SmartController extends Controller
             ];
         });
     
-        // Urutkan berdasarkan score secara descending
         $rankings = $rankings->sortByDesc('score');
     
         return view('results', compact('rankings'));
@@ -130,8 +154,3 @@ class SmartController extends Controller
         return redirect('/');
     }
 }
-
-
-
-
-
